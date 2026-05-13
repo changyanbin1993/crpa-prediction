@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-CRPA Prediction Model - Model Interpretation 
-"""
-
 import pandas as pd
 import numpy as np
 import os
@@ -36,7 +30,7 @@ for d in [PLOT_DIR, TABLE_DIR]:
 
 
 class ModelInterpreter:
-    """Model Interpreter Class"""
+    """模型解释类"""
 
     def __init__(self, train_path, val_path):
         self.train_path = train_path
@@ -51,7 +45,7 @@ class ModelInterpreter:
 
     def load_data(self):
         print("=" * 70)
-        print("Step 1: Load Data")
+        print("步骤1: 加载数据")
         print("=" * 70)
 
         train_df = pd.read_csv(self.train_path)
@@ -66,7 +60,7 @@ class ModelInterpreter:
         return self
 
     def load_best_model(self, model_name='XGBoost'):
-        print(f"\nStep 2: Load Model ({model_name})")
+        print(f"\n步骤2: 加载模型 ({model_name})")
 
         self.best_model_name = model_name
 
@@ -82,11 +76,11 @@ class ModelInterpreter:
             fname = f'{MODEL_DIR}/{model_name.lower().replace(" ", "_")}_model.pkl'
             loaded = joblib.load(fname)
             self.best_model = loaded['model'] if isinstance(loaded, dict) else loaded
-        print(f"✓ {model_name} loaded")
+        print(f"✓ {model_name} 已加载")
         return self
 
     # ───────────────────────────────────
-    # Calibration curves（5模型）
+    # 校准曲线（5模型）
     # ───────────────────────────────────
 
     def _load_all_predictions(self):
@@ -122,7 +116,7 @@ class ModelInterpreter:
 
     def plot_calibration_curve_all_models(self):
         print("\n" + "=" * 70)
-        print("Step 3: Calibration Curves (5 models)")
+        print("步骤3: 校准曲线（5模型）")
         print("=" * 70)
 
         preds = self._load_all_predictions()
@@ -199,12 +193,12 @@ class ModelInterpreter:
         return self
 
     # ───────────────────────────────────
-    # DCA（title corrected）
+    # DCA（标题已修正）
     # ───────────────────────────────────
 
     def plot_decision_curve_analysis(self):
         print("\n" + "=" * 70)
-        print("Step 4: Decision Curve Analysis (DCA)")
+        print("步骤4: 决策曲线分析 (DCA)")
         print("=" * 70)
 
         preds = self._load_all_predictions()
@@ -253,7 +247,7 @@ class ModelInterpreter:
     def shap_global_analysis(self):
         """[SE-3] SHAP全局分析 — 标注 log-odds scale"""
         print("\n" + "=" * 70)
-        print(f"Step 5: SHAP Global Analysis ({self.best_model_name})")
+        print(f"步骤5: SHAP全局分析 ({self.best_model_name})")
         print("=" * 70)
 
         try:
@@ -345,11 +339,11 @@ class ModelInterpreter:
         return self
 
     # ───────────────────────────────────
-    # SHAP individual cases分析
+    # SHAP 个案分析
     # ───────────────────────────────────
 
     def shap_individual_cases(self, n_cases=2):
-        print(f"\nStep 6: SHAP Individual Case Interpretation ({n_cases}cases)")
+        print(f"\n步骤6: SHAP个案解释 ({n_cases}个案例)")
 
         try:
             import shap
@@ -403,15 +397,14 @@ class ModelInterpreter:
                 order = np.argsort(np.abs(sv))[::-1][:max_display]
                 order = order[np.argsort(sv[order])[::-1]]
 
-                fig, ax = plt.subplots(figsize=(13, max(9, len(order) * 0.65)),
-                                       constrained_layout=True)
+                fig, ax = plt.subplots(figsize=(11.2, max(7.2, len(order) * 0.54)))
                 ypos = np.arange(len(order))[::-1]
                 bar_colors = ['#ff0051' if v > 0 else '#008bfb' for v in sv[order]]
                 bars = ax.barh(ypos, sv[order], color=bar_colors, height=0.7, alpha=0.85)
 
                 # 动态计算 xlim，保证数值标签不超出边界
                 max_abs = max(np.abs(sv[order]).max(), 0.01)
-                ax.set_xlim(-max_abs * 1.40, max_abs * 1.40)
+                ax.set_xlim(-max_abs * 1.26, max_abs * 1.26)
 
                 for i, (bar, val) in enumerate(zip(bars, sv[order])):
                     txt = f"{val:+.3f}"
@@ -451,31 +444,36 @@ class ModelInterpreter:
                                    Patch(facecolor='#008bfb', alpha=0.85, label='↓ Risk')],
                           loc='lower right', fontsize=10)
                 ax.grid(axis='x', alpha=0.3)
-                # constrained_layout 已处理边距，无需 tight_layout
+                fig.subplots_adjust(left=0.34, right=0.98, top=0.90, bottom=0.10)
 
                 safe = label.replace(" ", "_").replace("(", "").replace(")", "").lower()
-                plt.savefig(f'{PLOT_DIR}/11_shap_case_{safe}.png', dpi=300, bbox_inches='tight')
+                plt.savefig(
+                    f'{PLOT_DIR}/11_shap_case_{safe}.png',
+                    dpi=300,
+                    bbox_inches='tight',
+                    pad_inches=0.03
+                )
                 print(f"  ✓ {PLOT_DIR}/11_shap_case_{safe}.png")
                 plt.close()
 
         except Exception as e:
-            print(f"⚠ individual cases分析出错: {e}")
+            print(f"⚠ 个案分析出错: {e}")
             import traceback; traceback.print_exc()
 
         return self
 
     # ═══════════════════════════════════════
-    # [SE-7] sensitivity analysis — 纳入被排除的高缺失变量
+    # [SE-7] 敏感性分析 — 纳入被排除的高缺失变量
     # ═══════════════════════════════════════
 
     def sensitivity_analysis_missing_vars(self, raw_data_path='./CRPA.csv'):
         """[SE-7] 将之前排除的高缺失变量通过多重填补纳入，重新训练并比较"""
         print("\n" + "=" * 70)
-        print("[SE-7] sensitivity analysis — 纳入被排除的高缺失变量")
+        print("[SE-7] 敏感性分析 — 纳入被排除的高缺失变量")
         print("=" * 70)
 
         if not os.path.exists(raw_data_path):
-            print(f"  ⚠ {raw_data_path} 不存在，跳过sensitivity analysis")
+            print(f"  ⚠ {raw_data_path} 不存在，跳过敏感性分析")
             print(f"    请将原始数据文件放到当前目录后重跑")
             return self
 
@@ -559,13 +557,13 @@ class ModelInterpreter:
         return self
 
     # ═══════════════════════════════════════
-    # [SE-9] 完整reproducibility汇总
+    # [SE-9] 完整可重复性汇总
     # ═══════════════════════════════════════
 
     def reproducibility_summary(self):
-        """[SE-9] 汇总所有reproducibility信息"""
+        """[SE-9] 汇总所有可重复性信息"""
         print("\n" + "=" * 70)
-        print("[SE-9] reproducibility信息汇总")
+        print("[SE-9] 可重复性信息汇总")
         print("=" * 70)
 
         info = OrderedDict()
@@ -589,7 +587,7 @@ class ModelInterpreter:
         env_df = pd.DataFrame(list(info.items()), columns=['Item', 'Value'])
         env_df.to_csv(f'{TABLE_DIR}/Suppl_Software_Versions.csv', index=False)
 
-        # XGBoostHyperparameters
+        # XGBoost超参数
         hp_path = f'{MODEL_DIR}/xgboost_hyperparameters.json'
         if os.path.exists(hp_path):
             import json
@@ -597,11 +595,11 @@ class ModelInterpreter:
                 params = json.load(f)
             hp_df = pd.DataFrame(list(params.items()), columns=['Parameter', 'Value'])
             hp_df.to_csv(f'{TABLE_DIR}/Suppl_XGBoost_Hyperparameters.csv', index=False)
-            print(f"\n  XGBoostHyperparameters:")
+            print(f"\n  XGBoost超参数:")
             for k, v in params.items():
                 print(f"    {k:25s}: {v}")
 
-        # CatBoostHyperparameters
+        # CatBoost超参数
         cb_hp_path = f'{MODEL_DIR}/catboost_hyperparameters.json'
         if os.path.exists(cb_hp_path):
             import json
@@ -609,7 +607,7 @@ class ModelInterpreter:
                 cb_params = json.load(f)
             cb_hp_df = pd.DataFrame(list(cb_params.items()), columns=['Parameter', 'Value'])
             cb_hp_df.to_csv(f'{TABLE_DIR}/Suppl_CatBoost_Hyperparameters.csv', index=False)
-            print(f"\n  CatBoostHyperparameters:")
+            print(f"\n  CatBoost超参数:")
             for k, v in cb_params.items():
                 print(f"    {k:25s}: {v}")
 
@@ -623,9 +621,9 @@ class ModelInterpreter:
 def main():
     print("\n")
     print("=" * 70)
-    print("   CRPA Prediction Model - Model Interpretation + 补充分析 (修订版)")
+    print("   CRPA碳青霉烯耐药预测 - 模型解释 + 补充分析 (修订版)")
     print("=" * 70)
-    print("  Added: HL test, sensitivity analysis [SE-7], SHAP annotation [SE-3], reproducibility [SE-9]")
+    print("  新增: HL检验, 敏感性分析 [SE-7], SHAP标注 [SE-3], 可重复性 [SE-9]")
     print("\n")
 
     train_path = './final_train_data.csv'
@@ -656,21 +654,21 @@ def main():
 
     print("\n")
     print("=" * 70)
-    print("  Model Interpretation + Additional Analysis Complete!")
+    print("  模型解释 + 补充分析全部完成！")
     print("=" * 70)
     print(f"""
-  Generated plots ({PLOT_DIR}/):
-    07_calibration_curves.png         Calibration curves
-    08_decision_curve_analysis.png    DCA（title corrected）
-    09_shap_summary.png               SHAP摘要（annotated log-odds）
-    10_shap_bar.png                   SHAPbar plot
-    11_shap_case_*.png                SHAPindividual cases
+  生成的图表 ({PLOT_DIR}/):
+    07_calibration_curves.png         校准曲线
+    08_decision_curve_analysis.png    DCA（标题已修正）
+    09_shap_summary.png               SHAP摘要（标注log-odds）
+    10_shap_bar.png                   SHAP条形图
+    11_shap_case_*.png                SHAP个案
 
-  Generated tables ({TABLE_DIR}/):
+  生成的表格 ({TABLE_DIR}/):
     Suppl_Hosmer_Lemeshow.csv         HL检验
-    Suppl_Software_Versions.csv       Software versions [SE-9]
-    Suppl_XGBoost_Hyperparameters.csv XGBoostHyperparameters [SE-9]
-    Suppl_CatBoost_Hyperparameters.csv CatBoostHyperparameters [SE-9]
+    Suppl_Software_Versions.csv       软件版本 [SE-9]
+    Suppl_XGBoost_Hyperparameters.csv XGBoost超参数 [SE-9]
+    Suppl_CatBoost_Hyperparameters.csv CatBoost超参数 [SE-9]
     """)
 
 

@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-CRPA Prediction Model - Feature Selection
-(LASSO + RFE + SHAP Validation + Bootstrap Stability)
-
-"""
-
 import pandas as pd
 import numpy as np
 import warnings
@@ -25,7 +17,7 @@ RANDOM_SEED = 42
 
 
 class FeatureSelector:
-    """Feature Selector Class"""
+    """特征选择类"""
 
     def __init__(self, train_path, test_path):
         self.train_path = train_path
@@ -38,9 +30,9 @@ class FeatureSelector:
         self.selected_features = None
 
     def load_data(self):
-        """Load preprocessed train/test data from script 01"""
+        """加载01脚本已分割好的训练集和测试集"""
         print("=" * 70)
-        print("Step 1: Load Preprocessed Train/Test Data")
+        print("步骤1: 加载预处理后的训练/测试数据")
         print("=" * 70)
 
         train_df = pd.read_csv(self.train_path)
@@ -52,18 +44,18 @@ class FeatureSelector:
         self.y_test = test_df['CRPA']
         self.feature_names = list(self.X_train.columns)
 
-        print(f"Training set: {self.X_train.shape}")
-        print(f"Test set: {self.X_test.shape}")
-        print(f"Number of features: {len(self.feature_names)}")
-        print(f"Training CRPA positive rate: {self.y_train.mean():.2%}")
-        print(f"Test CRPA positive rate: {self.y_test.mean():.2%}")
+        print(f"训练集: {self.X_train.shape}")
+        print(f"测试集: {self.X_test.shape}")
+        print(f"特征数: {len(self.feature_names)}")
+        print(f"训练集CRPA阳性率: {self.y_train.mean():.2%}")
+        print(f"测试集CRPA阳性率: {self.y_test.mean():.2%}")
 
         return self
 
     def lasso_selection(self, n_alphas=100):
-        """Method A: LASSO Feature Selection (Primary Method)"""
+        """方法A: LASSO特征选择（候选池1）"""
         print("\n" + "=" * 70)
-        print("Step 2A: LASSO Feature Selection [Primary Method]")
+        print("步骤2A: LASSO特征选择 [候选池1]")
         print("=" * 70)
 
         scaler = StandardScaler()
@@ -79,14 +71,14 @@ class FeatureSelector:
         print(f"\n最优alpha: {lasso.alpha_:.6f}")
 
         coef = pd.DataFrame({
-            'Feature': self.feature_names,
-            'Coefficient': lasso.coef_
+            '特征': self.feature_names,
+            '系数': lasso.coef_
         })
-        lasso_features = coef[coef['Coefficient'] != 0].sort_values(
-            'Coefficient', key=abs, ascending=False)
+        lasso_features = coef[coef['系数'] != 0].sort_values(
+            '系数', key=abs, ascending=False)
 
-        print(f"Number of features selected by LASSO: {len(lasso_features)}")
-        print("\nLASSO features and coefficients (top 20):")
+        print(f"LASSO选择的特征数: {len(lasso_features)}")
+        print("\nLASSO特征及系数（前20）:")
         print(lasso_features.head(20))
 
         # ── 可视化 ──
@@ -122,10 +114,10 @@ class FeatureSelector:
         axes[1].axhline(y=0, color='black', lw=0.5)
 
         top20 = lasso_features.head(20)
-        colors = ['green' if x > 0 else 'red' for x in top20['Coefficient']]
-        axes[2].barh(range(len(top20)), top20['Coefficient'], color=colors, alpha=0.7)
+        colors = ['green' if x > 0 else 'red' for x in top20['系数']]
+        axes[2].barh(range(len(top20)), top20['系数'], color=colors, alpha=0.7)
         axes[2].set_yticks(range(len(top20)))
-        axes[2].set_yticklabels(top20['Feature'], fontsize=9)
+        axes[2].set_yticklabels(top20['特征'], fontsize=9)
         axes[2].set_xlabel('LASSO Coefficient', fontsize=12, fontweight='bold')
         axes[2].set_title(f'Selected Features (n={len(lasso_features)})',
                           fontsize=14, fontweight='bold')
@@ -135,15 +127,15 @@ class FeatureSelector:
 
         plt.tight_layout()
         plt.savefig('./plots/02a_lasso_analysis.png', dpi=300, bbox_inches='tight')
-        print("✓ Plot saved: ./plots/02a_lasso_analysis.png")
+        print("✓ 保存图表: ./plots/02a_lasso_analysis.png")
         plt.close()
 
-        return lasso_features['Feature'].tolist()
+        return lasso_features['特征'].tolist()
 
     def rfe_selection(self, min_features=5):
-        """Method B: RFE Feature Selection (Primary Method)"""
+        """方法B: RFE特征选择（候选池2）"""
         print("\n" + "=" * 70)
-        print("Step 2B: RFE Feature Selection [Primary Method] (Using Random Forest)")
+        print("步骤2B: RFE特征选择 [候选池2]（使用Random Forest）")
         print("=" * 70)
 
         rf = RandomForestClassifier(
@@ -154,15 +146,15 @@ class FeatureSelector:
             estimator=rf, step=1, cv=5,
             scoring='roc_auc', min_features_to_select=min_features, n_jobs=-1)
 
-        print("Training RFE model...")
+        print("训练RFE模型...")
         rfecv.fit(self.X_train, self.y_train)
 
-        print(f"\n✓ RFE training complete")
-        print(f"Optimal number of features: {rfecv.n_features_}")
-        print(f"Optimal CV AUC: {rfecv.cv_results_['mean_test_score'].max():.4f}")
+        print(f"\n✓ RFE训练完成")
+        print(f"最优特征数: {rfecv.n_features_}")
+        print(f"最优交叉验证AUC: {rfecv.cv_results_['mean_test_score'].max():.4f}")
 
         rfe_features = [feat for feat, sel in zip(self.feature_names, rfecv.support_) if sel]
-        print(f"\nFeatures selected by RFE:")
+        print(f"\nRFE选择的特征:")
         for i, feat in enumerate(rfe_features, 1):
             print(f"  {i}. {feat}")
 
@@ -178,24 +170,23 @@ class FeatureSelector:
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.savefig('./plots/03_rfe_curve.png', dpi=300, bbox_inches='tight')
-        print("✓ Plot saved: ./plots/03_rfe_curve.png")
+        print("✓ 保存图表: ./plots/03_rfe_curve.png")
         plt.close()
 
         return rfe_features
 
     def shap_selection(self, top_k=30):
         """
-        方法C: SHAPFeature重要性排名
+        方法C: SHAP特征重要性排名
         ─────────────────────────────────────
-        [SE-3] 注意: SHAP在此用于辅助验证LASSO和RFE的选择结果，
-        not as independent feature selection criterion。SHAP是可解释性工具，
-        此处利用其Feature排名提供独立的交叉验证视角。
+        SHAP-rank 作为三个并列候选池之一（与 LASSO、RFE 并列），
+        三池取并集后进入 Bootstrap 稳定性过滤。
         """
         print("\n" + "=" * 70)
-        print("Step 2C: SHAP Feature Importance Ranking [Validation, not primary selection method]")
+        print("步骤2C: SHAP特征重要性排名 [第三候选池]")
         print("=" * 70)
-        print("  [SE-3] SHAP用于交叉验证LASSO和RFE的选择结果，")
-        print("         not as independent feature selection criterion。")
+        print("  SHAP-rank 与 LASSO、RFE 并列作为候选池，")
+        print("         三池并集进入 Bootstrap 稳定性过滤。")
 
         train_data = lgb.Dataset(self.X_train, label=self.y_train)
         params = {
@@ -204,7 +195,7 @@ class FeatureSelector:
             'verbose': -1, 'seed': RANDOM_SEED
         }
 
-        print("\nTraining LightGBM model...")
+        print("\n训练LightGBM模型...")
         model = lgb.train(
             params, train_data, num_boost_round=100,
             valid_sets=[train_data],
@@ -212,7 +203,7 @@ class FeatureSelector:
 
         try:
             import shap
-            print("Calculating SHAP values...")
+            print("计算SHAP值...")
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(self.X_train)
             if isinstance(shap_values, list):
@@ -220,15 +211,15 @@ class FeatureSelector:
 
             mean_abs_shap = np.abs(shap_values).mean(axis=0)
             shap_importance = pd.DataFrame({
-                'Feature': self.feature_names,
+                '特征': self.feature_names,
                 'Mean_Abs_SHAP': mean_abs_shap
             }).sort_values('Mean_Abs_SHAP', ascending=False)
 
-            print(f"\nSHAP feature importance (top 20):")
+            print(f"\nSHAP特征重要性（前20）:")
             print(shap_importance.head(20))
 
-            shap_features = shap_importance.head(top_k)['Feature'].tolist()
-            print(f"\nTop SHAP-ranked{top_k}features: {len(shap_features)}")
+            shap_features = shap_importance.head(top_k)['特征'].tolist()
+            print(f"\nSHAP排名前{top_k}特征数: {len(shap_features)}")
 
             plt.figure(figsize=(10, 8))
             shap.summary_plot(shap_values[:500], self.X_train.iloc[:500],
@@ -236,47 +227,47 @@ class FeatureSelector:
             plt.tight_layout()
             plt.savefig('./plots/04_shap_summary_feature_selection.png',
                         dpi=300, bbox_inches='tight')
-            print("✓ Plot saved: ./plots/04_shap_summary_feature_selection.png")
+            print("✓ 保存图表: ./plots/04_shap_summary_feature_selection.png")
             plt.close()
 
             return shap_features
 
         except ImportError:
-            print("\n⚠ SHAP library not installed, skipping SHAP validation")
+            print("\n⚠ 未安装SHAP库，跳过SHAP验证")
             return []
 
-    def bootstrap_stability(self, n_bootstrap=100, stability_threshold=0.9):
+    def bootstrap_stability(self, n_bootstrap=100, stability_threshold=0.93):
         """
-        Step 3: Bootstrap Stability Validation
+        步骤3: Bootstrap稳定性验证
         ─────────────────────────────────
-        [SE-3] 修改: 明确描述三种方法的角色
+        [SE-3] 三种方法并列作为候选池，取并集后进入 Bootstrap 过滤
         """
         print("\n" + "=" * 70)
-        print(f"Step 3: Bootstrap Stability Validation（{n_bootstrap}resampling iterations）")
+        print(f"步骤3: Bootstrap稳定性验证（{n_bootstrap}次重采样）")
         print("=" * 70)
 
-        # 获取三种方法的Feature
+        # 获取三种方法的特征
         lasso_features = self.lasso_selection()
         rfe_features = self.rfe_selection()
         shap_features = self.shap_selection()
 
         # ──────────────────────────────────────────
-        # [SE-3] 新增: Feature Selection Method Overlap Analysis
+        # 特征选择方法交叠分析
         # ──────────────────────────────────────────
         lasso_set = set(lasso_features)
         rfe_set = set(rfe_features)
         shap_set = set(shap_features)
 
         print(f"\n{'='*50}")
-        print(f"  Feature Selection Method Overlap Analysis [SE-3]")
+        print(f"  特征选择方法交叠分析")
         print(f"{'='*50}")
-        print(f"  LASSO (primary method) selected:       {len(lasso_set)} ")
-        print(f"  RFE (primary method) selected:         {len(rfe_set)} ")
-        print(f"  SHAP（辅助验证）排名前列:    {len(shap_set)} ")
+        print(f"  LASSO（候选池1）选出:        {len(lasso_set)} 个")
+        print(f"  RFE（候选池2）选出:          {len(rfe_set)} 个")
+        print(f"  SHAP（第三候选池）排名前列:  {len(shap_set)} 个")
         print(f"  ─────────────────────────────────")
-        print(f"  LASSO ∩ RFE（双主力交集）:   {len(lasso_set & rfe_set)} ")
-        print(f"  三者交集:                    {len(lasso_set & rfe_set & shap_set)} ")
-        print(f"  三者并集（候选池）:          {len(lasso_set | rfe_set | shap_set)} ")
+        print(f"  LASSO ∩ RFE（双主力交集）:   {len(lasso_set & rfe_set)} 个")
+        print(f"  三者交集:                    {len(lasso_set & rfe_set & shap_set)} 个")
+        print(f"  三者并集（候选池）:          {len(lasso_set | rfe_set | shap_set)} 个")
 
         # 保存交叠表
         all_feats = sorted(lasso_set | rfe_set | shap_set)
@@ -289,23 +280,23 @@ class FeatureSelector:
         overlap_df['N_Methods'] = overlap_df[['LASSO', 'RFE', 'SHAP']].sum(axis=1)
         overlap_df = overlap_df.sort_values('N_Methods', ascending=False)
         overlap_df.to_csv('./feature_selection_overlap.csv', index=False)
-        print(f"\n✓ Feature overlap analysis saved: ./feature_selection_overlap.csv")
+        print(f"\n✓ 特征交叠分析已保存: ./feature_selection_overlap.csv")
 
-        # 合并候选Feature
+        # 合并候选特征
         candidate_features = list(set(lasso_features + rfe_features + shap_features))
         candidate_features = [f for f in candidate_features if f in self.feature_names]
-        print(f"\nTotal candidate features: {len(candidate_features)}")
+        print(f"\n候选特征总数: {len(candidate_features)}")
 
         X_train_candidates = self.X_train[candidate_features]
 
         # Bootstrap重采样
         feature_selection_counts = Counter()
-        print(f"\nStarting bootstrap resampling（{n_bootstrap}次）...")
+        print(f"\n开始Bootstrap重采样（{n_bootstrap}次）...")
 
         rng = np.random.default_rng(RANDOM_SEED)
         for i in range(n_bootstrap):
             if (i + 1) % 20 == 0:
-                print(f"  Completed {i+1}/{n_bootstrap} resampling iterations")
+                print(f"  完成 {i+1}/{n_bootstrap} 次重采样")
 
             indices = rng.choice(len(X_train_candidates),
                                  size=len(X_train_candidates), replace=True)
@@ -326,30 +317,27 @@ class FeatureSelector:
             feature_selection_counts.update(selected)
 
         feature_stability = pd.DataFrame({
-            'Feature': list(feature_selection_counts.keys()),
+            '特征': list(feature_selection_counts.keys()),
             '选择次数': list(feature_selection_counts.values()),
             '选择频率': [c / n_bootstrap for c in feature_selection_counts.values()]
         }).sort_values('选择频率', ascending=False)
 
-        print(f"\nFeature stability statistics (top 20):")
+        print(f"\n特征稳定性统计（前20）:")
         print(feature_stability.head(20))
 
         stable_features = feature_stability[
-            feature_stability['选择频率'] >= stability_threshold]['Feature'].tolist()
+            feature_stability['选择频率'] >= stability_threshold]['特征'].tolist()
 
-        print(f"\n稳定features（选择频率 >= {stability_threshold}): {len(stable_features)}")
+        print(f"\n稳定特征数（选择频率 >= {stability_threshold}): {len(stable_features)}")
 
         if len(stable_features) == 0:
-            for fallback in [0.8, 0.6]:
-                stable_features = feature_stability[
-                    feature_stability['选择频率'] >= fallback]['Feature'].tolist()
-                print(f"Lowering threshold to{fallback}: 稳定features = {len(stable_features)}")
-                if len(stable_features) > 0:
-                    break
+            raise ValueError(
+                f"未找到选择频率 >= {stability_threshold:.2%} 的特征，请检查Bootstrap结果或调整阈值。"
+            )
 
         # 保存稳定性结果
         feature_stability.to_csv('./feature_stability_results.csv', index=False)
-        print(f"✓ Stability results saved: ./feature_stability_results.csv")
+        print(f"✓ 稳定性结果已保存: ./feature_stability_results.csv")
 
         # 绘图
         plt.figure(figsize=(12, 8))
@@ -357,7 +345,7 @@ class FeatureSelector:
         colors_bar = ['#2ca02c' if f >= stability_threshold else '#d62728'
                       for f in top20['选择频率']]
         plt.barh(range(len(top20)), top20['选择频率'], color=colors_bar)
-        plt.yticks(range(len(top20)), top20['Feature'])
+        plt.yticks(range(len(top20)), top20['特征'])
         plt.xlabel('Selection Frequency', fontsize=12, fontweight='bold')
         plt.title(f'Feature Stability (Bootstrap={n_bootstrap}, threshold={stability_threshold})',
                   fontsize=14, fontweight='bold')
@@ -366,25 +354,25 @@ class FeatureSelector:
         plt.legend(fontsize=10)
         plt.tight_layout()
         plt.savefig('./plots/05_feature_stability.png', dpi=300, bbox_inches='tight')
-        print("✓ Plot saved: ./plots/05_feature_stability.png")
+        print("✓ 保存图表: ./plots/05_feature_stability.png")
         plt.close()
 
         self.selected_features = stable_features
         return self
 
     def save_results(self):
-        """保存Feature选择结果"""
+        """保存特征选择结果"""
         print("\n" + "=" * 70)
-        print("Step 4: Save Feature Selection Results")
+        print("步骤4: 保存特征选择结果")
         print("=" * 70)
 
         with open('./selected_features.txt', 'w') as f:
-            f.write("# 最终选择的Feature\n")
+            f.write("# 最终选择的特征\n")
             f.write(f"# 总数: {len(self.selected_features)}\n")
-            f.write(f"# 方法: LASSO(主力) + RFE(主力) + SHAP(辅助验证) → Bootstrap稳定性过滤\n\n")
+            f.write(f"# 方法: LASSO ∪ RFE ∪ SHAP-top-30 → Bootstrap稳定性过滤(≥0.93)\n\n")
             for i, feat in enumerate(self.selected_features, 1):
                 f.write(f"{i}. {feat}\n")
-        print(f"\n✓ Feature list saved: ./selected_features.txt")
+        print(f"\n✓ 特征列表已保存: ./selected_features.txt")
 
         # 保存最终数据集
         final_X_train = self.X_train[self.selected_features]
@@ -398,10 +386,10 @@ class FeatureSelector:
         final_train.to_csv('./final_train_data.csv', index=False)
         final_test.to_csv('./final_val_data.csv', index=False)
 
-        print(f"✓ Training set saved: ./final_train_data.csv")
-        print(f"✓ Test set saved: ./final_val_data.csv")
-        print(f"\n最终features: {len(self.selected_features)}")
-        print(f"Training set: {final_train.shape}, Test set: {final_test.shape}")
+        print(f"✓ 训练集已保存: ./final_train_data.csv")
+        print(f"✓ 测试集已保存: ./final_val_data.csv")
+        print(f"\n最终特征数: {len(self.selected_features)}")
+        print(f"训练集: {final_train.shape}, 测试集: {final_test.shape}")
 
         # EPV计算 [SE-8]
         n_events = int(self.y_train.sum()) + int(self.y_test.sum())
@@ -418,12 +406,12 @@ class FeatureSelector:
 def main():
     print("\n")
     print("=" * 70)
-    print("   CRPA碳青霉烯耐药预测 - Feature选择 (修订版)")
+    print("   CRPA碳青霉烯耐药预测 - 特征选择 (修订版)")
     print("=" * 70)
-    print("  Revision: SHAP as validation tool [SE-3], Feature交叠分析")
+    print("  LASSO ∪ RFE ∪ SHAP-top-30 → Bootstrap稳定性过滤")
     print("\n")
 
-    # 读取01脚本输出的Training set/Test set
+    # 读取01脚本输出的训练集/测试集
     train_path = './processed_train.csv'
     test_path = './processed_test.csv'
 
@@ -431,14 +419,14 @@ def main():
 
     (selector
      .load_data()
-     .bootstrap_stability(n_bootstrap=100, stability_threshold=0.9)
+     .bootstrap_stability(n_bootstrap=100, stability_threshold=0.93)
      .save_results())
 
     print("\n")
     print("=" * 70)
-    print("  Feature选择Completed！")
+    print("  特征选择完成！")
     print("=" * 70)
-    print("\nNext step: Run 03_model_training.py for model training")
+    print("\n下一步: 运行 03_model_training.py 进行模型训练")
     print("\n")
 
 

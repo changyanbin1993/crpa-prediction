@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-CRPA Prediction Model - Six ML Models Training + Additional Evaluation per Reviewer Requirements
-
-"""
-
 import pandas as pd
 import numpy as np
 import json
@@ -36,6 +29,7 @@ import joblib
 
 RANDOM_SEED = 42
 N_BOOTSTRAP = 1000
+CV_N_JOBS   = min(8, os.cpu_count() or 1)
 PLOT_DIR    = './plots'
 TABLE_DIR   = './tables'
 MODEL_DIR   = './models'
@@ -45,7 +39,7 @@ for d in [PLOT_DIR, TABLE_DIR, MODEL_DIR]:
 
 
 class ModelTrainer:
-    """Model Trainer Class"""
+    """模型训练类"""
 
     def __init__(self, train_path, val_path):
         self.train_path = train_path
@@ -62,7 +56,7 @@ class ModelTrainer:
 
     def load_data(self):
         print("=" * 70)
-        print("Step 1: Load Data")
+        print("步骤1: 加载数据")
         print("=" * 70)
 
         train_df = pd.read_csv(self.train_path)
@@ -76,11 +70,11 @@ class ModelTrainer:
 
         self.scale_pos_weight = np.sum(self.y_train == 0) / np.sum(self.y_train == 1)
 
-        print(f"Training set: {self.X_train.shape}")
-        print(f"Test set: {self.X_val.shape}")
-        print(f"Number of features: {len(self.feature_names)}")
-        print(f"Training setCRPA positive rate: {self.y_train.mean():.2%}")
-        print(f"Test setCRPA positive rate: {self.y_val.mean():.2%}")
+        print(f"训练集: {self.X_train.shape}")
+        print(f"测试集: {self.X_val.shape}")
+        print(f"特征数: {len(self.feature_names)}")
+        print(f"训练集CRPA阳性率: {self.y_train.mean():.2%}")
+        print(f"测试集CRPA阳性率: {self.y_val.mean():.2%}")
         print(f"scale_pos_weight: {self.scale_pos_weight:.2f}")
 
         return self
@@ -91,7 +85,7 @@ class ModelTrainer:
 
     def train_lasso(self):
         print("\n" + "=" * 70)
-        print("Model 1: L1-Logistic Regression (LASSO)")
+        print("模型1: L1-Logistic Regression (LASSO)")
         print("=" * 70)
 
         scaler = StandardScaler()
@@ -107,7 +101,7 @@ class ModelTrainer:
             n_jobs=-1
         )
         lr.fit(X_train_scaled, self.y_train)
-        print(f"✓ Training complete, Optimal C: {lr.C_[0]:.6f}")
+        print(f"✓ 训练完成, 最优C: {lr.C_[0]:.6f}")
 
         y_pred_proba = lr.predict_proba(X_val_scaled)[:, 1]
 
@@ -117,7 +111,7 @@ class ModelTrainer:
 
     def train_random_forest(self):
         print("\n" + "=" * 70)
-        print("Model 2: Random Forest")
+        print("模型2: Random Forest")
         print("=" * 70)
 
         rf = RandomForestClassifier(
@@ -125,7 +119,7 @@ class ModelTrainer:
             min_samples_leaf=2, max_features='sqrt', class_weight='balanced',
             random_state=RANDOM_SEED, n_jobs=-1)
         rf.fit(self.X_train, self.y_train)
-        print(f"✓ Training complete")
+        print(f"✓ 训练完成")
 
         self.models['Random Forest'] = {'model': rf}
         self.predictions['Random Forest'] = rf.predict_proba(self.X_val)[:, 1]
@@ -133,7 +127,7 @@ class ModelTrainer:
 
     def train_adaboost(self):
         print("\n" + "=" * 70)
-        print("Model 3: AdaBoost")
+        print("模型3: AdaBoost")
         print("=" * 70)
 
         base = DecisionTreeClassifier(max_depth=3, random_state=RANDOM_SEED)
@@ -141,7 +135,7 @@ class ModelTrainer:
                                   learning_rate=1.0, algorithm='SAMME',
                                   random_state=RANDOM_SEED)
         ada.fit(self.X_train, self.y_train)
-        print(f"✓ Training complete")
+        print(f"✓ 训练完成")
 
         self.models['AdaBoost'] = {'model': ada}
         self.predictions['AdaBoost'] = ada.predict_proba(self.X_val)[:, 1]
@@ -149,7 +143,7 @@ class ModelTrainer:
 
     def train_xgboost(self, use_gpu=True):
         print("\n" + "=" * 70)
-        print(f"Model 4: XGBoost")
+        print(f"模型4: XGBoost")
         print("=" * 70)
 
         device = 'cpu'
@@ -158,7 +152,7 @@ class ModelTrainer:
                 import subprocess
                 if subprocess.run(['nvidia-smi'], capture_output=True).returncode == 0:
                     device = 'cuda'
-                    print("✓ GPU detected")
+                    print("✓ 检测到GPU")
             except Exception:
                 pass
 
@@ -176,12 +170,12 @@ class ModelTrainer:
         # ──────────────────────────────────────────
         with open(f'{MODEL_DIR}/xgboost_hyperparameters.json', 'w') as f:
             json.dump(params, f, indent=2, default=str)
-        print(f"✓ 超参数saved: {MODEL_DIR}/xgboost_hyperparameters.json")
+        print(f"✓ 超参数已保存: {MODEL_DIR}/xgboost_hyperparameters.json")
 
         dtrain = xgb.DMatrix(self.X_train, label=self.y_train)
         dval = xgb.DMatrix(self.X_val, label=self.y_val)
 
-        # Step 1: 内部分割找最优迭代次数（避免Test set泄漏）
+        # Step 1: 内部分割找最优迭代次数（避免测试集泄漏）
         X_inner, X_es, y_inner, y_es = train_test_split(
             self.X_train, self.y_train, test_size=0.2,
             random_state=RANDOM_SEED, stratify=self.y_train)
@@ -191,12 +185,12 @@ class ModelTrainer:
                               evals=[(des, 'eval')], early_stopping_rounds=50,
                               verbose_eval=False)
         best_iter = model_es.best_iteration
-        print(f"  Internal validation best iteration: {best_iter}")
+        print(f"  内部验证最佳迭代: {best_iter}")
 
-        # Step 2: 全Training set重训
+        # Step 2: 全训练集重训
         model = xgb.train(params, dtrain, num_boost_round=best_iter + 1,
                            verbose_eval=False)
-        print(f"✓ Training complete, using {best_iter + 1} iterations")
+        print(f"✓ 训练完成, 使用 {best_iter + 1} 轮迭代")
 
         self.models['XGBoost'] = {'model': model}
         self.predictions['XGBoost'] = model.predict(dval)
@@ -204,7 +198,7 @@ class ModelTrainer:
 
     def train_lightgbm(self, use_gpu=True):
         print("\n" + "=" * 70)
-        print("Model 5: LightGBM")
+        print("模型5: LightGBM")
         print("=" * 70)
 
         device = 'cpu'
@@ -235,12 +229,12 @@ class ModelTrainer:
         model_es = lgb.train(params, train_data, num_boost_round=1000,
                               valid_sets=[valid_data], callbacks=callbacks)
         best_iter = model_es.best_iteration
-        print(f"  Internal validation best iteration: {best_iter}")
+        print(f"  内部验证最佳迭代: {best_iter}")
 
-        # Step 2: 全Training set重训
+        # Step 2: 全训练集重训
         full_data = lgb.Dataset(self.X_train, label=self.y_train)
         model = lgb.train(params, full_data, num_boost_round=best_iter)
-        print(f"✓ Training complete, using {best_iter} iterations")
+        print(f"✓ 训练完成, 使用 {best_iter} 轮迭代")
 
         self.models['LightGBM'] = {'model': model}
         self.predictions['LightGBM'] = model.predict(self.X_val,
@@ -249,7 +243,7 @@ class ModelTrainer:
 
     def train_catboost(self, use_gpu=True):
         print("\n" + "=" * 70)
-        print("Model 6: CatBoost")
+        print("模型6: CatBoost")
         print("=" * 70)
 
         task_type = 'CPU'
@@ -274,26 +268,26 @@ class ModelTrainer:
                                        verbose=0, **cb_params)
         model_es.fit(X_inner, y_inner, eval_set=(X_es, y_es), plot=False)
         best_iter = model_es.best_iteration_
-        print(f"  Internal validation best iteration: {best_iter}")
+        print(f"  内部验证最佳迭代: {best_iter}")
 
-        # Step 2: 全Training set重训
+        # Step 2: 全训练集重训
         cb = CatBoostClassifier(iterations=best_iter, verbose=100, **cb_params)
         cb.fit(self.X_train, self.y_train, plot=False)
-        print(f"✓ Training complete, using {best_iter} iterations")
+        print(f"✓ 训练完成, 使用 {best_iter} 轮迭代")
 
         # [SE-8/SE-9] 保存CatBoost超参数到JSON
         catboost_params = {**cb_params, 'iterations': best_iter,
                           'best_iteration_from_es': best_iter}
         with open(f'{MODEL_DIR}/catboost_hyperparameters.json', 'w') as f:
             json.dump(catboost_params, f, indent=2, default=str)
-        print(f"✓ 超参数saved: {MODEL_DIR}/catboost_hyperparameters.json")
+        print(f"✓ 超参数已保存: {MODEL_DIR}/catboost_hyperparameters.json")
 
         self.models['CatBoost'] = {'model': cb}
         self.predictions['CatBoost'] = cb.predict_proba(self.X_val)[:, 1]
         return self
 
     # ───────────────────────────────────
-    # 模型评估（with 95% CI）
+    # 模型评估（含95% CI）
     # ───────────────────────────────────
 
     def bootstrap_ci(self, y_true, y_pred_proba, threshold, n_bootstrap=1000):
@@ -342,7 +336,7 @@ class ModelTrainer:
 
     def evaluate_all_models(self, n_bootstrap=1000):
         print("\n" + "=" * 70)
-        print("Step 2: Evaluate All Models（with 95% CI）")
+        print("步骤2: 评估所有模型（含95% CI）")
         print("=" * 70)
 
         for model_name, y_pred_proba in self.predictions.items():
@@ -393,14 +387,14 @@ class ModelTrainer:
 
         results_df = pd.DataFrame(self.results).sort_values('AUC', ascending=False)
         results_df.to_csv('./model_performance.csv', index=False)
-        print(f"\n✓ 性能表saved: ./model_performance.csv")
+        print(f"\n✓ 性能表已保存: ./model_performance.csv")
 
         self.best_model_name = results_df.iloc[0]['Model']
-        print(f"✓ Best model: {self.best_model_name} (AUROC={results_df.iloc[0]['AUC']:.4f})")
+        print(f"✓ 最优模型: {self.best_model_name} (AUROC={results_df.iloc[0]['AUC']:.4f})")
         return self
 
     def plot_roc_curves(self):
-        print("\nPlotting ROC curves...")
+        print("\n绘制ROC曲线...")
         plt.figure(figsize=(10, 8))
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
         for (name, yp), c in zip(self.predictions.items(), colors):
@@ -424,7 +418,7 @@ class ModelTrainer:
     # ═══════════════════════════════════════
 
     def plot_pr_curves(self):
-        """[SE-5] 绘制PR curves → Supplementary Figure S4"""
+        """[SE-5] 绘制PR曲线 → Supplementary Figure S4"""
         print("\n" + "=" * 70)
         print("[SE-5] Precision-Recall 曲线 + AUPRC")
         print("=" * 70)
@@ -493,11 +487,12 @@ class ModelTrainer:
                 max_depth=6, learning_rate=0.05, n_estimators=300,
                 subsample=0.8, colsample_bytree=0.8, gamma=0.1,
                 reg_alpha=0.1, reg_lambda=1.0, scale_pos_weight=spw,
-                use_label_encoder=False, random_state=RANDOM_SEED, verbosity=0),
+                use_label_encoder=False, random_state=RANDOM_SEED,
+                verbosity=0, n_jobs=1),
             'Random Forest': RandomForestClassifier(
                 n_estimators=300, max_depth=20, min_samples_split=5,
                 min_samples_leaf=2, class_weight='balanced',
-                random_state=RANDOM_SEED, n_jobs=-1),
+                random_state=RANDOM_SEED, n_jobs=1),
             'AdaBoost': AdaBoostClassifier(
                 estimator=DecisionTreeClassifier(max_depth=3, random_state=RANDOM_SEED),
                 n_estimators=200, algorithm='SAMME', random_state=RANDOM_SEED),
@@ -510,14 +505,15 @@ class ModelTrainer:
         try:
             model_defs['LightGBM'] = lgb.LGBMClassifier(
                 objective='binary', num_leaves=31, max_depth=6, learning_rate=0.05,
-                n_estimators=300, scale_pos_weight=spw, verbose=-1,
+                n_estimators=300, scale_pos_weight=spw, verbose=-1, n_jobs=1,
                 random_state=RANDOM_SEED)
         except Exception:
             pass
         try:
             model_defs['CatBoost'] = CatBoostClassifier(
                 iterations=300, depth=6, learning_rate=0.05,
-                scale_pos_weight=spw, random_seed=RANDOM_SEED, verbose=0)
+                scale_pos_weight=spw, random_seed=RANDOM_SEED,
+                verbose=0, thread_count=1)
         except Exception:
             pass
 
@@ -525,7 +521,7 @@ class ModelTrainer:
         for name, model in model_defs.items():
             print(f"  {name}...", end=' ', flush=True)
             scores = cross_val_score(model, full_X, full_y, cv=cv,
-                                      scoring='roc_auc', n_jobs=-1)
+                                      scoring='roc_auc', n_jobs=CV_N_JOBS)
             cv_results[name] = scores
             print(f"AUROC = {scores.mean():.4f} ± {scores.std():.4f}")
 
@@ -560,7 +556,7 @@ class ModelTrainer:
     # ═══════════════════════════════════════
 
     def threshold_performance_table(self):
-        """[SE-6] 不同阈值下Best model性能 → Suppl Table S5"""
+        """[SE-6] 不同阈值下最优模型性能 → Suppl Table S5"""
         print("\n" + "=" * 70)
         print("[SE-6] 多阈值性能指标表")
         print("=" * 70)
@@ -726,7 +722,7 @@ class ModelTrainer:
 
     def save_models(self):
         print("\n" + "=" * 70)
-        print("Save All Models")
+        print("保存所有模型")
         print("=" * 70)
 
         # [修复] 保存LASSO模型
@@ -758,10 +754,10 @@ class ModelTrainer:
 def main():
     print("\n")
     print("=" * 70)
-    print("   CRPA Prediction Model - Training + Additional Evaluation (Revised)")
+    print("   CRPA碳青霉烯耐药预测 - 模型训练 + 补充评估 (修订版)")
     print("=" * 70)
-    print("  Added: CV [SE-4], PR curves [SE-5],")
-    print("        Threshold table [SE-6], Prevalence [R1-3], DeLong [R1-5]")
+    print("  新增: CV [SE-4], PR曲线 [SE-5],")
+    print("        阈值表 [SE-6], Prevalence [R1-3], DeLong [R1-5]")
     print("\n")
 
     train_path = './final_train_data.csv'
@@ -796,10 +792,10 @@ def main():
 
     print("\n")
     print("=" * 70)
-    print("  Model Training + Additional Evaluation Complete!")
+    print("  模型训练 + 补充评估全部完成！")
     print("=" * 70)
-    print(f"\n  Supplementary materials output directory: {TABLE_DIR}/")
-    print("  Next step: Run 04_model_interpretation.py")
+    print(f"\n  补充材料输出目录: {TABLE_DIR}/")
+    print("  下一步: 运行 04_model_interpretation.py")
     print("\n")
 
 

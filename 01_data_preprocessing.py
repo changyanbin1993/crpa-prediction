@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Clinical Prediction Model for Carbapenem-Resistant Pseudomonas aeruginosa (CRPA)
-Data Preprocessing and Feature Engineering
-
-"""
-
 import pandas as pd
 import numpy as np
 import platform
@@ -23,7 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ────────────────────────────
-# Global Configuration
+# 全局配置
 # ────────────────────────────
 RANDOM_SEED = 42
 TEST_SIZE   = 0.2
@@ -33,7 +25,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 
 class DataPreprocessor:
-    """Data Preprocessor Class"""
+    """数据预处理类"""
 
     def __init__(self, data_path):
         self.data_path = data_path
@@ -43,44 +35,44 @@ class DataPreprocessor:
         self.y_train = None
         self.y_test = None
         self.feature_names = None
-        # [SE-7] Track excluded variables
+        # [SE-7] 新增: 记录被排除变量信息
         self.excluded_vars_info = None
 
     def load_data(self):
-        """Load data"""
+        """加载数据"""
         print("=" * 70)
-        print("Step 1: Load Data")
+        print("步骤1: 加载数据")
         print("=" * 70)
 
         self.df = pd.read_csv(self.data_path, encoding='utf-8-sig')
-        print(f"Data shape: {self.df.shape}")
-        print(f"\nTarget variable (CRPA) distribution:")
+        print(f"数据形状: {self.df.shape}")
+        print(f"\n目标变量 (CRPA) 分布:")
         print(self.df['CRPA'].value_counts())
-        print(f"CRPA positive rate: {self.df['CRPA'].mean():.2%}")
+        print(f"CRPA阳性率: {self.df['CRPA'].mean():.2%}")
 
         return self
 
     def check_data_quality(self):
-        """Check data quality"""
+        """检查数据质量"""
         print("\n" + "=" * 70)
-        print("Step 2: Data Quality Check")
+        print("步骤2: 数据质量检查")
         print("=" * 70)
 
-        # Missing value statistics
+        # 缺失值统计
         missing = self.df.isnull().sum()
         missing_pct = (missing / len(self.df) * 100).round(2)
         missing_df = pd.DataFrame({
-            'Missing_Count': missing[missing > 0],
-            'Missing_Pct(%)': missing_pct[missing > 0]
-        }).sort_values('Missing_Pct(%)', ascending=False)
+            '缺失数量': missing[missing > 0],
+            '缺失比例(%)': missing_pct[missing > 0]
+        }).sort_values('缺失比例(%)', ascending=False)
 
-        print("\nMissing value statistics:")
+        print("\n缺失值统计:")
         if len(missing_df) > 0:
             print(missing_df)
         else:
-            print("✓ No missing values")
+            print("✓ 无缺失值")
 
-        # [SE-7] Save complete missing rate table
+        # [SE-7] 新增: 保存完整缺失率表
         exclude_cols = ['Anchor Year Group', 'CRPA']
         feature_cols = [c for c in self.df.columns if c not in exclude_cols]
         all_missing = pd.DataFrame({
@@ -90,17 +82,17 @@ class DataPreprocessor:
                                 for c in feature_cols]
         }).sort_values('Missing_Rate(%)', ascending=False)
         all_missing.to_csv('./missing_rate_summary.csv', index=False)
-        print(f"\n✓ Complete missing rate summary saved: ./missing_rate_summary.csv")
+        print(f"\n✓ 完整缺失率统计已保存: ./missing_rate_summary.csv")
 
-        print("\nDescriptive statistics for numeric features:")
+        print("\n数值型特征描述性统计:")
         print(self.df.describe().T)
 
         return self
 
     def remove_high_missing_features(self, threshold=10):
-        """Remove features with missing rate > threshold%"""
+        """删除缺失比例>threshold%的变量"""
         print("\n" + "=" * 70)
-        print(f"Step 3: Remove Features with Missing Rate > {threshold}%")
+        print(f"步骤3: 删除缺失比例>{threshold}%的变量")
         print("=" * 70)
 
         missing_pct = (self.df.isnull().sum() / len(self.df) * 100)
@@ -112,65 +104,65 @@ class DataPreprocessor:
                 high_missing_features.append(col)
 
         if len(high_missing_features) > 0:
-            print(f"\n⚠ Found {len(high_missing_features)} high-missing features (>{threshold}%):")
+            print(f"\n⚠ 发现 {len(high_missing_features)} 个高缺失率变量 (>{threshold}%):")
             for feat in high_missing_features:
-                print(f"  - {feat}: Missing rate = {missing_pct[feat]:.2f}%")
+                print(f"  - {feat}: 缺失率 = {missing_pct[feat]:.2f}%")
 
             # ────────────────────────────────────────
-            # [SE-7] Save excluded variable information
+            # [SE-7] 新增: 保存被排除变量信息到文件
             # ────────────────────────────────────────
             self.excluded_vars_info = pd.DataFrame({
                 'Variable': high_missing_features,
                 'Missing_Rate(%)': [round(missing_pct[f], 2) for f in high_missing_features]
             }).sort_values('Missing_Rate(%)', ascending=False)
             self.excluded_vars_info.to_csv('./excluded_high_missing_vars.csv', index=False)
-            print(f"\n✓ Excluded variable information saved: ./excluded_high_missing_vars.csv")
-            print("  (For response to reviewer comment SE-7)")
+            print(f"\n✓ 被排除变量信息已保存: ./excluded_high_missing_vars.csv")
+            print("  （用于 Response Letter 中回复审稿意见 SE-7）")
 
             self.df = self.df.drop(columns=high_missing_features)
-            print(f"\n✓ Removed {len(high_missing_features)} high-missing features")
-            print(f"✓ Remaining features: {self.df.shape[1]}")
+            print(f"\n✓ 已删除 {len(high_missing_features)} 个高缺失率变量")
+            print(f"✓ 剩余变量数: {self.df.shape[1]}")
         else:
-            print(f"\n✓ No features with missing rate > {threshold}%")
+            print(f"\n✓ 没有缺失率>{threshold}%的变量")
 
         return self
 
     def split_and_impute(self):
         """
-        [SE-2] Split data first, then impute using training set median
+        [SE-2] 修改: 先分割训练集/测试集，再用训练集中位数填补
         ──────────────────────────────────────────────────────
-        Original: Impute all → split (risk of data leakage)
-        Modified: Split → fit imputer on train only → transform separately
+        原始流程: 全量填补 → 再分割（存在数据泄漏风险）
+        修改后:   先分割 → 仅用训练集拟合Imputer → 分别填补
         """
         print("\n" + "=" * 70)
-        print("Step 4: Split Data → Median Imputation (Prevent Data Leakage)")
+        print("步骤4: 分割数据 → 中位数填补（防止数据泄漏）")
         print("=" * 70)
 
-        # Separate features and target
+        # 分离特征和目标
         y = self.df['CRPA'].values
         exclude_cols = ['Anchor Year Group', 'CRPA']
         feature_cols = [col for col in self.df.columns if col not in exclude_cols]
         X_raw = self.df[feature_cols].copy()
         X_raw.columns = [col.strip() for col in X_raw.columns]
 
-        print(f"\nNumber of features: {X_raw.shape[1]}")
-        print(f"Number of samples: {X_raw.shape[0]}")
+        print(f"\n特征数量: {X_raw.shape[1]}")
+        print(f"样本数量: {X_raw.shape[0]}")
 
         # ──────────────────────────────────────────
-        # Key modification: Split first, then impute
+        # 关键修改: 先分割再填补
         # ──────────────────────────────────────────
         X_train_raw, X_test_raw, self.y_train, self.y_test = train_test_split(
             X_raw, y, test_size=TEST_SIZE, random_state=RANDOM_SEED, stratify=y
         )
 
-        print(f"\nTraining set: {X_train_raw.shape} (CRPA positive rate: {self.y_train.mean():.2%})")
-        print(f"Test set: {X_test_raw.shape} (CRPA positive rate: {self.y_test.mean():.2%})")
+        print(f"\n训练集: {X_train_raw.shape} (CRPA阳性率: {self.y_train.mean():.2%})")
+        print(f"测试集: {X_test_raw.shape} (CRPA阳性率: {self.y_test.mean():.2%})")
 
-        # Fit imputer on training set only
+        # 仅用训练集拟合中位数
         imputer = SimpleImputer(strategy='median')
         imputer.fit(X_train_raw)
 
-        # Transform separately
+        # 分别转换
         self.X_train = pd.DataFrame(
             imputer.transform(X_train_raw),
             columns=X_raw.columns, index=X_train_raw.index
@@ -181,10 +173,10 @@ class DataPreprocessor:
         )
         self.feature_names = list(self.X_train.columns)
 
-        print(f"\n✓ Median calculated from training set only (n={len(X_train_raw)}), preventing data leakage")
-        print(f"✓ Training and test sets imputed separately")
-        print(f"✓ Remaining missing values (train): {self.X_train.isnull().sum().sum()}")
-        print(f"✓ Remaining missing values (test): {self.X_test.isnull().sum().sum()}")
+        print(f"\n✓ 中位数仅从训练集计算（n={len(X_train_raw)}），防止数据泄漏")
+        print(f"✓ 训练集和测试集分别填补完成")
+        print(f"✓ 剩余缺失值 (训练): {self.X_train.isnull().sum().sum()}")
+        print(f"✓ 剩余缺失值 (测试): {self.X_test.isnull().sum().sum()}")
 
         return self
 
@@ -378,9 +370,9 @@ class DataPreprocessor:
 def main():
     print("\n")
     print("=" * 70)
-    print("   CRPA Prediction Model - Data Preprocessing (Revised)")
+    print("   CRPA碳青霉烯耐药预测 - 数据预处理 (修订版)")
     print("=" * 70)
-    print("  Revisions: Split before imputation [SE-2], Track excluded vars [SE-7], Log environment [SE-9]")
+    print("  修订: 先分割再填补 [SE-2], 记录排除变量 [SE-7], 环境记录 [SE-9]")
     print("\n")
 
     data_path = './CRPA.csv'
@@ -391,19 +383,19 @@ def main():
      .load_data()
      .check_data_quality()
      .remove_high_missing_features(threshold=10)
-     .split_and_impute()                           # [SE-2] Split before imputation
+     .split_and_impute()                           # [SE-2] 先分割再填补
      .check_collinearity(threshold=10)
      .check_low_variance(threshold=0.01)
      .univariate_feature_selection(k=50, p_threshold=0.1)
      .save_processed_data('./processed_train.csv', './processed_test.csv')
-     .log_environment()                            # [SE-9] Log environment
+     .log_environment()                            # [SE-9] 记录环境
      .plot_summary('./plots'))
 
     print("\n")
     print("=" * 70)
-    print("  Preprocessing Complete!")
+    print("  预处理完成！")
     print("=" * 70)
-    print("\nNext step: Run 02_feature_selection.py for feature selection")
+    print("\n下一步: 运行 02_feature_selection.py 进行特征筛选")
     print("\n")
 
 
